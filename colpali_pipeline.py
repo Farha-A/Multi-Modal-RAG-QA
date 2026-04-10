@@ -11,20 +11,24 @@ Architecture:
     5. Inference Pipeline       (query → retrieval → Gemini generation)
 
 Usage:
-    python colpali_pipeline.py index      # Index all PDFs in Data/PDFs/
-    python colpali_pipeline.py query      # Interactive query mode
-    python colpali_pipeline.py pipeline   # Full pipeline: index then query
+    streamlit run colpali_pipeline.py
 """
 
-import argparse
 import base64
 import io
 import os
 import sys
 import time
+import warnings
 from pathlib import Path
 from uuid import uuid4
 
+# Suppress dynamic import warnings from libraries like transformers
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*Accessing.*__path__.*")
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
+import streamlit as st
 import torch
 from dotenv import load_dotenv
 from PIL import Image
@@ -40,8 +44,8 @@ IMAGE_DIR = BASE_DIR / "Data" / "images"
 
 COLPALI_MODEL_NAME = os.getenv("COLPALI_MODEL_NAME", "vidore/colqwen2-v1.0-hf")
 QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "docbank_colpali")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.2-11b-vision-preview")
 TOP_K = int(os.getenv("TOP_K", "3"))
 
 
@@ -203,10 +207,13 @@ class QdrantIndexer:
 
     def __init__(self, collection_name: str = QDRANT_COLLECTION_NAME):
         from qdrant_client import QdrantClient
+        import os
 
         self.collection_name = collection_name
-        self.client = QdrantClient(":memory:")  # In-memory for local usage
-        self._collection_created = False
+        db_path = BASE_DIR / "Data" / "qdrant_db"
+        os.makedirs(db_path, exist_ok=True)
+        self.client = QdrantClient(path=str(db_path))  # Persistent local storage
+        self._collection_created = self.client.collection_exists(self.collection_name)
 
     def create_collection(self):
         """
@@ -376,81 +383,77 @@ class ColPaliRetriever:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 5. Gemini Generator (Multimodal LLM for Answer Generation)
+# 5. Groq Generator (Multimodal LLM for Answer Generation)
 # ═════════════════════════════════════════════════════════════════════════════
 
-class GeminiGenerator:
+class GroqGenerator:
     """
-    Generates answers using Google Gemini with retrieved page images.
+    Generates answers using Groq with retrieved page images.
 
     From the article: "The top-k relevant document images are retrieved and
     passed directly to a Multimodal LLM to generate the final,
     context-aware answer."
-
-    Adapted from the reference implementation (which used Claude Sonnet)
-    to use Google Gemini instead.
     """
 
-    def __init__(self, api_key: str = GEMINI_API_KEY, model_name: str = GEMINI_MODEL):
+    def __init__(self, api_key: str = GROQ_API_KEY, model_name: str = GROQ_MODEL):
         self.api_key = api_key
         self.model_name = model_name
         self.client = None
 
     def _ensure_client(self):
-        """Lazily initialize the Gemini client."""
+        """Lazily initialize the Groq client."""
         if self.client is not None:
             return
 
-        from google import genai
-        self.client = genai.Client(api_key=self.api_key)
+        from groq import Groq
+        self.client = Groq(api_key=self.api_key)
 
     def generate(self, query: str, retrieved_pages: list[dict]) -> str:
         """
-        Generate an answer using Gemini with the retrieved page images.
-
-        Args:
-            query: The user's question
-            retrieved_pages: List of dicts from ColPaliRetriever.retrieve()
-
-        Returns:
-            Generated answer string
+        Generate an answer using Groq Llama 3.2 Vision with the retrieved page images.
         """
         self._ensure_client()
 
-        # Build the multimodal prompt
-        prompt_parts = []
+        # Build the multimodal prompt content
+        content = []
 
-        # System instruction
-        prompt_parts.append(
-            "You are a helpful document analysis assistant. "
-            "You have been given document page images that were retrieved as "
-            "the most relevant pages for the user's query. "
-            "Analyze these images carefully and provide a detailed, accurate "
-            "answer based ONLY on the information visible in these pages.\n\n"
-            "Retrieved document pages:\n"
-        )
-
-        # Add each retrieved page image
-        for i, page in enumerate(retrieved_pages, 1):
-            img_path = page["image_path"]
-            prompt_parts.append(
-                f"\n--- Page {i}: {page['document']}, Page {page['page']} "
-                f"(score: {page['score']:.4f}) ---\n"
+        # System instruction & Query
+        content.append({
+            "type": "text",
+            "text": (
+                "You are a helpful document analysis assistant. "
+                "You have been given document page images that were retrieved as "
+                "the most relevant pages for the user's query. "
+                "Analyze these images carefully and provide a detailed, accurate "
+                "answer based ONLY on the information visible in these pages.\n\n"
+                f"User Query: {query}\n\nProvide a detailed answer:"
             )
+        })
 
-            # Load and add the image
-            img = Image.open(img_path).convert("RGB")
-            prompt_parts.append(img)
+        # Add each retrieved page image encoded as base64
+        for page in retrieved_pages:
+            img_path = page["image_path"]
+            with open(img_path, "rb") as image_file:
+                base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+                
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{base64_image}"
+                }
+            })
 
-        # Add the query
-        prompt_parts.append(f"\n\nUser Query: {query}\n\nProvide a detailed answer:")
-
-        # Generate using google-genai SDK
-        response = self.client.models.generate_content(
+        # Generate using groq SDK
+        response = self.client.chat.completions.create(
             model=self.model_name,
-            contents=prompt_parts,
+            messages=[
+                {
+                    "role": "user",
+                    "content": content
+                }
+            ],
         )
-        return response.text
+        return response.choices[0].message.content
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -486,6 +489,26 @@ class RAGPipeline:
         self.model, self.processor = loader.load()
         self._model_loaded = True
 
+    def load_pipeline(self) -> bool:
+        """Loads the pre-existing Qdrant collection and initializes the retriever if available."""
+        if self.indexer is None:
+            self.indexer = QdrantIndexer()
+        if self.indexer.client.collection_exists(self.indexer.collection_name):
+            try:
+                info = self.indexer.client.get_collection(self.indexer.collection_name)
+                if info.points_count > 0:
+                    self._load_model()
+                    self.retriever = ColPaliRetriever(
+                        qdrant_client=self.indexer.get_client(),
+                        model=self.model,
+                        processor=self.processor,
+                    )
+                    self.generator = GroqGenerator()
+                    return True
+            except Exception as e:
+                print(f"  Error loading existing database: {e}")
+        return False
+
     def index(self):
         """
         Full indexing pipeline:
@@ -510,7 +533,8 @@ class RAGPipeline:
         self._load_model()
 
         # Step 3 & 4: Embed and index
-        self.indexer = QdrantIndexer()
+        if self.indexer is None:
+            self.indexer = QdrantIndexer()
         self.indexer.index_pages(self.model, self.processor, pages)
 
         # Setup retriever
@@ -521,7 +545,7 @@ class RAGPipeline:
         )
 
         # Setup generator
-        self.generator = GeminiGenerator()
+        self.generator = GroqGenerator()
 
         print(f"\n  Pipeline ready! {len(pages)} pages indexed.")
         return pages
@@ -563,7 +587,7 @@ class RAGPipeline:
         # Generate
         if generate:
             try:
-                print(f"\n  Generating answer with {GEMINI_MODEL}...")
+                print(f"\n  Generating answer with {GROQ_MODEL}...")
                 start = time.time()
                 answer = self.generator.generate(query_text, retrieved)
                 gen_time = time.time() - start
@@ -575,8 +599,10 @@ class RAGPipeline:
                 result["answer"] = answer
             except ValueError as e:
                 print(f"\n  Skipping generation: {e}")
+                result["error"] = str(e)
             except Exception as e:
                 print(f"\n  Generation error: {e}")
+                result["error"] = str(e)
 
         return result
 
@@ -625,71 +651,72 @@ class RAGPipeline:
 
             if user_input.lower() in ("gen on", "gen off"):
                 current_gen = user_input.lower() == "gen on"
-                print(f"  ✓ Generation {'enabled' if current_gen else 'disabled'}")
+                print(f"  Generation {'enabled' if current_gen else 'disabled'}")
                 continue
 
             self.query(user_input, top_k=current_top_k, generate=current_gen)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CLI Entry Point
+# Streamlit Interface
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="ColPali Multi-Modal RAG Pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python colpali_pipeline.py index       # Index all PDFs
-  python colpali_pipeline.py query       # Interactive query mode
-  python colpali_pipeline.py pipeline    # Full pipeline (index + query)
-        """,
-    )
-    parser.add_argument(
-        "command",
-        choices=["index", "query", "pipeline"],
-        help="Command to run: 'index' to index PDFs, 'query' for interactive querying, "
-             "'pipeline' for full index-then-query flow",
-    )
-    parser.add_argument(
-        "--top-k", type=int, default=TOP_K,
-        help=f"Number of pages to retrieve (default: {TOP_K})",
-    )
-    parser.add_argument(
-        "--no-generate", action="store_true",
-        help="Disable Gemini answer generation (retrieval-only mode)",
-    )
-    parser.add_argument(
-        "--batch-size", type=int, default=2,
-        help="Batch size for embedding (default: 2, keep small for CPU)",
-    )
+    st.set_page_config(page_title="ColPali Multi-Modal RAG", page_icon="📄", layout="wide")
+    st.title("ColPali Multi-Modal RAG Pipeline")
+    st.markdown("Query your PDF documents using ColPali embeddings and Groq Llama 3.2 Vision.")
 
-    args = parser.parse_args()
+    @st.cache_resource(show_spinner=False)
+    def get_pipeline():
+        p = RAGPipeline()
+        p.load_pipeline()
+        return p
+        
+    pipeline = get_pipeline()
+    
+    if "indexed" not in st.session_state:
+        st.session_state.indexed = pipeline.retriever is not None
 
-    pipeline = RAGPipeline()
-
-    if args.command == "index":
-        pipeline.index()
-        print("\n  Done! Re-run with 'query' command to search your documents.")
-
-    elif args.command == "query":
-        # For query-only mode, we need to index first
-        print("  Note: Indexing required before querying (in-memory Qdrant).")
-        pages = pipeline.index()
-        if pages:
-            pipeline.interactive_query(
-                top_k=args.top_k,
-                generate=not args.no_generate,
-            )
-
-    elif args.command == "pipeline":
-        pages = pipeline.index()
-        if pages:
-            pipeline.interactive_query(
-                top_k=args.top_k,
-                generate=not args.no_generate,
-            )
+    with st.sidebar:
+        st.header("Configuration")
+        top_k = st.number_input("Top K Results", min_value=1, max_value=10, value=TOP_K)
+        generate = st.checkbox("Generate Answer with Groq", value=True)
+        
+        st.markdown("---")
+        if st.button("Index Documents", width="stretch"):
+            with st.spinner("Indexing PDFs... This might take a while."):
+                pages = pipeline.index()
+                if pages is not None:
+                    st.session_state.indexed = True
+                    st.success(f"Successfully indexed {len(pages)} pages!")
+                else:
+                    st.warning("No pages found to index. Check your Data/PDFs directory.")
+                    
+    if not st.session_state.indexed:
+        st.info("⬅️ Please index your documents from the sidebar to start querying.")
+        return
+        
+    query_text = st.chat_input("Ask a question about your documents...")
+    
+    if query_text:
+        st.chat_message("user").write(query_text)
+        
+        with st.chat_message("assistant"):
+            with st.spinner("Retrieving and generating answer..."):
+                result = pipeline.query(query_text, top_k=top_k, generate=generate)
+                
+            if "answer" in result:
+                st.write(result["answer"])
+            elif "error" in result:
+                st.error(f"**API Error:** {result['error']}")
+                
+            if result.get("retrieved_pages"):
+                st.markdown("### Retrieved Pages")
+                cols = st.columns(len(result["retrieved_pages"]))
+                for col, page in zip(cols, result["retrieved_pages"]):
+                    with col:
+                        img = Image.open(page["image_path"])
+                        st.image(img, caption=f"{page['document']} (Page {page['page']}) | Score: {page['score']:.4f}", width='stretch')
 
 
 if __name__ == "__main__":
