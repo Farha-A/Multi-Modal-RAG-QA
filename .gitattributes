@@ -1,1 +1,2 @@
+*.sqlite filter=lfs diff=lfs merge=lfs -text
 Data/qdrant_db/collection/docbank_colpali/storage.sqlite filter=lfs diff=lfs merge=lfs -text
