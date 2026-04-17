@@ -14,6 +14,7 @@ from PIL import Image
 
 from pipeline import RAGPipeline
 from pipeline.config import TOP_K
+from pipeline.benchmark import run_benchmark, BENCHMARK_QUERIES
 
 
 def main():
@@ -52,27 +53,61 @@ def main():
         st.info("⬅️ Please index your documents from the sidebar to start querying.")
         return
         
-    query_text = st.chat_input("Ask a question about your documents...")
+    tab1, tab2 = st.tabs(["Chat & Query", "Evaluation Suite"])
     
-    if query_text:
-        st.chat_message("user").write(query_text)
+    with tab1:
+        query_text = st.chat_input("Ask a question about your documents...")
         
-        with st.chat_message("assistant"):
-            with st.spinner("Retrieving and generating answer..."):
-                result = pipeline.query(query_text, top_k=top_k, generate=generate)
+        if query_text:
+            st.chat_message("user").write(query_text)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Retrieving and generating answer..."):
+                    result = pipeline.query(query_text, top_k=top_k, generate=generate)
+                    
+                if "answer" in result:
+                    st.write(result["answer"])
+                elif "error" in result:
+                    st.error(f"**API Error:** {result['error']}")
+                    
+                if result.get("retrieved_pages"):
+                    st.markdown("### Retrieved Pages")
+                    cols = st.columns(len(result["retrieved_pages"]))
+                    for col, page in zip(cols, result["retrieved_pages"]):
+                        with col:
+                            img = Image.open(page["image_path"])
+                            st.image(img, caption=f"{page['document']} (Page {page['page']}) | Score: {page['score']:.4f}", use_container_width=True)
+
+    with tab2:
+        st.header("Multi-Modal Benchmark Suite")
+        st.markdown("Run a standardized set of queries to evaluate retrieval and answer generation across Text, Table, Figure, and Layout modalities.")
+        
+        if st.button("Run Benchmark Suite", type="primary"):
+            st.info(f"Running {len(BENCHMARK_QUERIES)} benchmark queries. Generation enabled: `{generate}`.")
+            progress_bar = st.progress(0)
+            
+            for idx, result in enumerate(run_benchmark(pipeline, top_k=top_k, generate=generate)):
+                progress = (idx + 1) / len(BENCHMARK_QUERIES)
+                progress_bar.progress(progress)
                 
-            if "answer" in result:
-                st.write(result["answer"])
-            elif "error" in result:
-                st.error(f"**API Error:** {result['error']}")
-                
-            if result.get("retrieved_pages"):
-                st.markdown("### Retrieved Pages")
-                cols = st.columns(len(result["retrieved_pages"]))
-                for col, page in zip(cols, result["retrieved_pages"]):
-                    with col:
-                        img = Image.open(page["image_path"])
-                        st.image(img, caption=f"{page['document']} (Page {page['page']}) | Score: {page['score']:.4f}", width='stretch')
+                with st.expander(f"[{result['modality']}] {result['query']}", expanded=True):
+                    st.write(f"**Description:** {result['description']}")
+                    st.markdown(f"**Retrieval Time:** `{result['retrieval_time']:.2f}s` | **Generation Time:** `{result['generation_time']:.2f}s`")
+                    
+                    if result["error"]:
+                        st.error(f"Error: {result['error']}")
+                    elif result["answer"]:
+                        st.info(f"**Answer:** {result['answer']}")
+                        
+                    if result["retrieved_pages"]:
+                        st.markdown("**Top Retrieved Pages:**")
+                        cols = st.columns(min(3, len(result["retrieved_pages"])))
+                        for i, (col, page) in enumerate(zip(cols, result["retrieved_pages"][:3])):
+                            with col:
+                                img = Image.open(page["image_path"])
+                                st.image(img, caption=f"Rank {i+1} | Score: {page['score']:.4f}", use_container_width=True)
+                                
+            st.success("Benchmark Complete!")
 
 
 if __name__ == "__main__":
