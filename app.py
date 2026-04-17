@@ -78,7 +78,7 @@ def main():
                             img = Image.open(page["image_path"])
                             chunk_type = page.get("chunk_type", "Chunk")
                             caption = f"{page['document']} (P{page['page']}) | {chunk_type} | Score: {page['score']:.4f}"
-                            st.image(img, caption=caption, use_container_width=True)
+                            st.image(img, caption=caption, width='stretch')
                             if page.get("text"):
                                 with st.expander("View Text"):
                                     st.write(page["text"])
