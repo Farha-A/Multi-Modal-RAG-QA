@@ -76,7 +76,12 @@ def main():
                     for col, page in zip(cols, result["retrieved_pages"]):
                         with col:
                             img = Image.open(page["image_path"])
-                            st.image(img, caption=f"{page['document']} (Page {page['page']}) | Score: {page['score']:.4f}", use_container_width=True)
+                            chunk_type = page.get("chunk_type", "Chunk")
+                            caption = f"{page['document']} (P{page['page']}) | {chunk_type} | Score: {page['score']:.4f}"
+                            st.image(img, caption=caption, use_container_width=True)
+                            if page.get("text"):
+                                with st.expander("View Text"):
+                                    st.write(page["text"])
 
     with tab2:
         st.header("Multi-Modal Benchmark Suite")
@@ -98,6 +103,10 @@ def main():
                         st.error(f"Error: {result['error']}")
                     elif result["answer"]:
                         st.info(f"**Answer:** {result['answer']}")
+                        if result.get("has_citation"):
+                            st.success("✅ Proper Source Citation Detected")
+                        else:
+                            st.warning("⚠️ No clear source citation found in the answer")
                         
                     if result["retrieved_pages"]:
                         st.markdown("**Top Retrieved Pages:**")
@@ -105,7 +114,11 @@ def main():
                         for i, (col, page) in enumerate(zip(cols, result["retrieved_pages"][:3])):
                             with col:
                                 img = Image.open(page["image_path"])
-                                st.image(img, caption=f"Rank {i+1} | Score: {page['score']:.4f}", use_container_width=True)
+                                chunk_type = page.get("chunk_type", "Chunk")
+                                st.image(img, caption=f"Rank {i+1} | {chunk_type} | Score: {page['score']:.4f}", width='stretch')
+                                if page.get("text"):
+                                    with st.expander("Text"):
+                                        st.write(page["text"])
                                 
             st.success("Benchmark Complete!")
 

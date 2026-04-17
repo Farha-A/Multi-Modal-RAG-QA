@@ -58,20 +58,34 @@ class GroqGenerator:
             "type": "text",
             "text": (
                 "You are a helpful document analysis assistant. "
-                "You have been given document page images that were retrieved as "
-                "the most relevant pages for the user's query. "
-                "Analyze these images carefully and provide a detailed, accurate "
-                "answer based ONLY on the information visible in these pages.\n\n"
-                f"User Query: {query}\n\nProvide a detailed answer:"
+                "You have been given specific document structural chunks (text blocks, tables, images) that were retrieved as "
+                "the most relevant sections for the user's query. "
+                "Analyze these visual chunks carefully and provide a detailed, accurate "
+                "answer based ONLY on the information visible in them.\n\n"
+                "IMPORTANT: You MUST include source attributions for all information used in your answer. "
+                "Use the provided metadata to cite explicitly in the format: "
+                "`[Document Name, Page X, Chunk Type]`. "
+                f"\n\nUser Query: {query}\n\nProvide a detailed answer:"
             )
         })
 
         # Add each retrieved page image encoded as base64
         for page in retrieved_pages:
             img_path = page["image_path"]
+            doc_name = page.get("document", "Unknown")
+            page_num = page.get("page", "Unknown")
+            chunk_type = page.get("chunk_type", "Unknown")
+            text_snippet = page.get("text", "")
+            
             with open(img_path, "rb") as image_file:
                 base64_image = base64.b64encode(image_file.read()).decode('utf-8')
                 
+            # Prepend metadata reference for this image chunk
+            content.append({
+                "type": "text",
+                "text": f"--- CHUNK METADATA ---\nDocument: {doc_name}\nPage: {page_num}\nType: {chunk_type}\nExtracted Text Snippet: {text_snippet}\n"
+            })
+            
             content.append({
                 "type": "image_url",
                 "image_url": {

@@ -12,11 +12,11 @@
 
 ## Overview
 
-This project implements an end-to-end **Multi-Modal Retrieval-Augmented Generation (RAG)** pipeline that queries PDF document collections using visual embeddings instead of traditional text extraction. Built on the [ColPali](https://arxiv.org/abs/2407.01449) architecture, the system uses a Vision Language Model to generate multi-vector embeddings directly from document page images, enabling semantically rich retrieval that captures layout, tables, figures, and text simultaneously.
+This project implements an end-to-end **Multi-Modal Retrieval-Augmented Generation (RAG)** pipeline that queries PDF document collections using visual embeddings instead of traditional text extraction. Built on the [ColPali](https://arxiv.org/abs/2407.01449) architecture, the system generates multi-vector embeddings from semantic visual chunks (tables, images, text blocks), enabling semantically rich and fine-grained retrieval that precisely captures complex layouts.
 
 ### Why Visual RAG?
 
-Traditional RAG pipelines rely on OCR and text extraction, which often **lose critical visual context** — tables break apart, figures are ignored, and complex layouts are flattened. ColPali sidesteps this entirely by treating each document page as an image and embedding it with a Vision Transformer, preserving the full visual fidelity of the original document.
+Traditional RAG pipelines rely on OCR and text extraction, which often **lose critical visual context** — tables break apart, figures are ignored, and complex layouts are flattened. This pipeline enhances visual RAG by using PyMuPDF to structurally parse documents and extract targeted chunks as distinct, high-resolution visual segments, preserving full visual fidelity while improving retrieval precision.
 
 ---
 
@@ -31,13 +31,13 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  1. INGESTION  (PDFImageConverter)                              │
-│     PDF files ──► High-resolution JPEG page images (300 DPI)    │
+│     PDF files ──► Semantic visual chunks (Tables, Text, Images) │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  2. INDEXING  (QdrantIndexer + ColPaliModelLoader)              │
-│     Page images ──► colSmol-256M multi-vector embeddings ──► Qdrant │
+│     Visual chunks ──► colSmol-256M multi-vector embeddings ──► Qdrant │
 │     (128-dim patches, COSINE distance, MaxSim comparator)       │
 └────────────────────────────┬────────────────────────────────────┘
                              │
@@ -45,13 +45,13 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 ┌─────────────────────────────────────────────────────────────────┐
 │  3. RETRIEVAL  (ColPaliRetriever)                               │
 │     Query embedding ──► MaxSim late-interaction search ──►      │
-│     Top-k most relevant page images                             │
+│     Top-k most relevant visual chunks                           │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  4. GENERATION  (GroqGenerator)                                 │
-│     Retrieved page images + query ──► Groq Llama 3.2 Vision    │
+│     Retrieved visual chunks + query ──► Groq Llama 3.2 Vision  │
 │     ──► Context-aware natural language answer                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -87,11 +87,11 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 
 | Module | Class | Responsibility |
 | --- | --- | --- |
-| `ingestion.py` | `PDFImageConverter` | Converts every page of every PDF to a 300 DPI JPEG image using `pdf2image` |
+| `ingestion.py` | `PDFImageConverter` | Converts PDFs into semantic visual chunks (Tables, Text, Images) using `PyMuPDF` |
 | `model_loader.py` | `ColPaliModelLoader` | Loads ColSmol model & processor from HuggingFace for CPU inference |
 | `indexer.py` | `QdrantIndexer` | Creates a Qdrant collection with multi-vector config and upserts ColPali embeddings |
-| `retrieval.py` | `ColPaliRetriever` | Embeds a text query with ColPali and retrieves top-k pages via MaxSim scoring |
-| `generation.py` | `GroqGenerator` | Sends retrieved page images + query to Groq's Llama 3.2 Vision for answer generation |
+| `retrieval.py` | `ColPaliRetriever` | Embeds a text query with ColPali and retrieves top-k chunks via MaxSim scoring |
+| `generation.py` | `GroqGenerator` | Sends retrieved visual chunks + query to Groq's Llama 3.2 Vision for answer generation |
 | `rag_pipeline.py` | `RAGPipeline` | Orchestrates the full index → retrieve → generate workflow |
 | `config.py` | — | Centralises env vars, paths, model names, and default constants |
 
@@ -102,10 +102,6 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 ### Prerequisites
 
 - **Python 3.10+**
-- **Poppler** — required by `pdf2image` for PDF rendering
-  - Windows: download from [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases) and add `bin/` to `PATH`
-  - macOS: `brew install poppler`
-  - Linux: `sudo apt-get install poppler-utils`
 - **Groq API Key** — get one at [console.groq.com](https://console.groq.com)
 
 ### Installation
@@ -174,8 +170,8 @@ streamlit run app.py
 Then in the browser:
 
 1. Click **"Index Documents"** in the sidebar to ingest your PDFs (one-time step)
-2. Type a question in the chat input
-3. View the generated answer alongside the retrieved source page images
+2. Type a question in the chat input or explore the **Evaluation Suite** tab
+3. View the generated answer alongside the retrieved source visual chunks
 
 > **Note:** The first run will download the ColSmol model from HuggingFace (~400 MB). Subsequent runs load from cache.
 
@@ -186,7 +182,7 @@ from pipeline import RAGPipeline
 
 # Initialise and index
 rag = RAGPipeline()
-rag.index()  # converts PDFs, embeds pages, stores in Qdrant
+rag.index()  # semantic chunking, embeds chunks, stores in Qdrant
 
 # Query
 result = rag.query("What methodology was used in the experiments?")
@@ -221,7 +217,7 @@ All settings are centralised in `pipeline/config.py` and can be overridden via e
 | `QDRANT_COLLECTION_NAME` | `docbank_colpali` | Name of the Qdrant vector collection |
 | `GROQ_API_KEY` | — | API key for Groq inference (required for generation) |
 | `GROQ_MODEL` | `llama-3.2-11b-vision-preview` | Groq model used for answer generation |
-| `TOP_K` | `3` | Number of pages to retrieve per query |
+| `TOP_K` | `3` | Number of chunks to retrieve per query |
 
 ---
 

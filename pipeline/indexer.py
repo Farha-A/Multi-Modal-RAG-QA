@@ -120,6 +120,9 @@ class QdrantIndexer:
                     payload={
                         "document": page["pdf_name"],
                         "page": page["page_num"],
+                        "chunk_id": page.get("chunk_id", ""),
+                        "chunk_type": page.get("chunk_type", ""),
+                        "text": page.get("text", ""),
                         "image_path": page["image_path"],
                     },
                 )

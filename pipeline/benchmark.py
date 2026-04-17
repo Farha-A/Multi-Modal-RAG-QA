@@ -82,6 +82,7 @@ def run_benchmark(pipeline: Any, top_k: int = 3, generate: bool = True) -> Gener
                 answer = pipeline.generator.generate(query_text, retrieved)
                 result["generation_time"] = time.time() - start_generation
                 result["answer"] = answer
+                result["has_citation"] = "[" in answer and "]" in answer
         except Exception as e:
             result["error"] = str(e)
 

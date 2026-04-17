@@ -68,6 +68,9 @@ class ColPaliRetriever:
             retrieved.append({
                 "document": point.payload["document"],
                 "page": point.payload["page"],
+                "chunk_id": point.payload.get("chunk_id", ""),
+                "chunk_type": point.payload.get("chunk_type", "Chunk"),
+                "text": point.payload.get("text", ""),
                 "image_path": point.payload["image_path"],
                 "score": point.score,
             })
