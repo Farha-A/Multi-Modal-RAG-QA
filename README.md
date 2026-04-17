@@ -1,17 +1,12 @@
-<p align="center">
-  <h1 align="center">📄 ColPali Multi-Modal RAG Pipeline</h1>
-  <p align="center">
-    A visual retrieval-augmented generation system that <em>sees</em> your documents — no OCR required.
-  </p>
-</p>
+# 📄 ColPali Multi-Modal RAG Pipeline
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Streamlit-1.56-FF4B4B?logo=streamlit&logoColor=white" alt="Streamlit">
-  <img src="https://img.shields.io/badge/ColPali-ColSmol-blueviolet" alt="ColPali">
-  <img src="https://img.shields.io/badge/Qdrant-Vector_DB-DC382D?logo=qdrant&logoColor=white" alt="Qdrant">
-  <img src="https://img.shields.io/badge/Groq-Llama_3.2_Vision-orange" alt="Groq">
-</p>
+  A visual retrieval-augmented generation system that *sees* your documents — no OCR required.
+
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+  ![Streamlit](https://img.shields.io/badge/Streamlit-1.56-FF4B4B?logo=streamlit&logoColor=white)
+  ![ColPali](https://img.shields.io/badge/ColPali-ColSmol-blueviolet)
+  ![Qdrant](https://img.shields.io/badge/Qdrant-Vector_DB-DC382D?logo=qdrant&logoColor=white)
+  ![Groq](https://img.shields.io/badge/Groq-Llama_3.2_Vision-orange)
 
 ---
 
@@ -27,7 +22,7 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        User Query                               │
 │                    "What is shown in Table 3?"                   │
@@ -65,7 +60,7 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 
 ## Project Structure
 
-```
+```text
 .
 ├── app.py                      # Streamlit web interface
 ├── requirements.txt            # Python dependencies
@@ -91,7 +86,7 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 ## Key Components
 
 | Module | Class | Responsibility |
-|---|---|---|
+| --- | --- | --- |
 | `ingestion.py` | `PDFImageConverter` | Converts every page of every PDF to a 300 DPI JPEG image using `pdf2image` |
 | `model_loader.py` | `ColPaliModelLoader` | Loads ColSmol model & processor from HuggingFace for CPU inference |
 | `indexer.py` | `QdrantIndexer` | Creates a Qdrant collection with multi-vector config and upserts ColPali embeddings |
@@ -221,7 +216,7 @@ rag.interactive_query()
 All settings are centralised in `pipeline/config.py` and can be overridden via environment variables or the `.env` file:
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `COLPALI_MODEL_NAME` | `vidore/colSmol-256M` | HuggingFace model ID for the ColPali vision encoder |
 | `QDRANT_COLLECTION_NAME` | `docbank_colpali` | Name of the Qdrant vector collection |
 | `GROQ_API_KEY` | — | API key for Groq inference (required for generation) |
