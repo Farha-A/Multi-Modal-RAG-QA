@@ -16,7 +16,7 @@ This project implements an end-to-end **Multi-Modal Retrieval-Augmented Generati
 
 ### Why Visual RAG?
 
-Traditional RAG pipelines rely on OCR and text extraction, which often **lose critical visual context** — tables break apart, figures are ignored, and complex layouts are flattened. This pipeline enhances visual RAG by using PyMuPDF to structurally parse documents and extract targeted chunks as distinct, high-resolution visual segments, preserving full visual fidelity while improving retrieval precision.
+Traditional RAG pipelines rely on OCR and text extraction, which often **lose critical visual context** — tables break apart, figures are ignored, and complex layouts are flattened. This pipeline enhances visual RAG by using `pymupdf4llm` and its GNN-based `pymupdf_layout` engine to structurally parse documents, categorize elements (text, tables, images), filter out negligible blocks, and extract targeted chunks as distinct, high-resolution visual segments. This preserves full visual fidelity while improving retrieval precision.
 
 ---
 
@@ -87,7 +87,7 @@ Traditional RAG pipelines rely on OCR and text extraction, which often **lose cr
 
 | Module | Class | Responsibility |
 | --- | --- | --- |
-| `ingestion.py` | `PDFImageConverter` | Converts PDFs into semantic visual chunks (Tables, Text, Images) using `PyMuPDF` |
+| `ingestion.py` | `PDFImageConverter` | Converts PDFs into semantic visual chunks (Tables, Text, Images) using `pymupdf4llm` and GNN-based layout analysis |
 | `model_loader.py` | `ColPaliModelLoader` | Loads ColSmol model & processor from HuggingFace for CPU inference |
 | `indexer.py` | `QdrantIndexer` | Creates a Qdrant collection with multi-vector config and upserts ColPali embeddings |
 | `retrieval.py` | `ColPaliRetriever` | Embeds a text query with ColPali and retrieves top-k chunks via MaxSim scoring |
