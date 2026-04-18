@@ -45,9 +45,9 @@ def main():
                 pages = pipeline.index()
                 if pages is not None:
                     st.session_state.indexed = True
-                    st.success(f"Successfully indexed {len(pages)} pages!")
+                    st.success(f"Successfully indexed {len(pages)} chunks!")
                 else:
-                    st.warning("No pages found to index. Check your Data/PDFs directory.")
+                    st.warning("No chunks found to index. Check your Data/PDFs directory.")
                     
     if not st.session_state.indexed:
         st.info("⬅️ Please index your documents from the sidebar to start querying.")
@@ -71,7 +71,7 @@ def main():
                     st.error(f"**API Error:** {result['error']}")
                     
                 if result.get("retrieved_pages"):
-                    st.markdown("### Retrieved Pages")
+                    st.markdown("### Retrieved Chunks")
                     cols = st.columns(len(result["retrieved_pages"]))
                     for col, page in zip(cols, result["retrieved_pages"]):
                         with col:
@@ -109,7 +109,7 @@ def main():
                             st.warning("⚠️ No clear source citation found in the answer")
                         
                     if result["retrieved_pages"]:
-                        st.markdown("**Top Retrieved Pages:**")
+                        st.markdown("**Top Retrieved Chunks:**")
                         cols = st.columns(min(3, len(result["retrieved_pages"])))
                         for i, (col, page) in enumerate(zip(cols, result["retrieved_pages"][:3])):
                             with col:
