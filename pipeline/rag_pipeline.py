@@ -92,7 +92,7 @@ class RAGPipeline:
         pages = converter.convert_all()
 
         if not pages:
-            print("\n  No pages to index. Exiting.")
+            print("\n  No chunks to index. Exiting.")
             return None
 
         # Step 2: Load model
@@ -113,7 +113,7 @@ class RAGPipeline:
         # Setup generator
         self.generator = GroqGenerator()
 
-        print(f"\n  Pipeline ready! {len(pages)} pages indexed.")
+        print(f"\n  Pipeline ready! {len(pages)} chunks indexed.")
         return pages
 
     def query(self, query_text: str, top_k: int = TOP_K, generate: bool = True) -> dict:
@@ -143,7 +143,7 @@ class RAGPipeline:
         retrieved = self.retriever.retrieve(query_text, top_k=top_k)
         retrieval_time = time.time() - start
 
-        print(f"\n  Retrieved {len(retrieved)} pages in {retrieval_time:.2f}s:")
+        print(f"\n  Retrieved {len(retrieved)} chunks in {retrieval_time:.2f}s:")
         for i, page in enumerate(retrieved, 1):
             print(f"    {i}. {page['document']} — Page {page['page']} "
                   f"(score: {page['score']:.4f})")

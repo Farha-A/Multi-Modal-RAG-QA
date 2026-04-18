@@ -113,7 +113,7 @@ class PDFImageConverter:
                 text = md_text[pos_start:pos_end].strip()
 
                 # Filter out negligible text blocks (by word count)
-                if chunk_type == "Text" and len(text.split()) < 15:
+                if chunk_type == "Text" and len(text.split()) < 30:
                     continue
 
                 # Build a fitz.Rect and validate
