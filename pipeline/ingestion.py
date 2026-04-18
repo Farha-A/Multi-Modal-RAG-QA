@@ -109,7 +109,7 @@ class PDFImageConverter:
                         text = text.strip()
                         
                         # Filter out negligible text blocks
-                        if chunk_type == "Text" and len(text) < 15:
+                        if chunk_type == "Text" and len(text) < 30:
                             continue
                             
                         # Ensure bbox is valid and visible
